@@ -20,6 +20,7 @@ struct Sphere {
     center: (f64, f64, f64),
     radius: f64,
     color: (u8, u8, u8),
+    specular: f64,
 }
 
 struct Texture {
@@ -89,21 +90,25 @@ pub fn main() {
                 center: (0.0, -1.0, 3.0),
                 radius: 1.0,
                 color: (255, 0, 0), // Red
+                specular: 500.0,    // Shiny
             },
             Sphere {
                 center: (2.0, 0.0, 4.0),
                 radius: 1.0,
                 color: (0, 0, 255), // Blue
+                specular: 500.0,    // Shiny
             },
             Sphere {
                 center: (-2.0, 0.0, 4.0),
                 radius: 1.0,
                 color: (0, 255, 0), // Green
+                specular: 10.0,     // Somewhat shiny
             },
             Sphere {
                 color: (255, 255, 0), // Yellow
                 center: (0.0, -5001.0, 0.0),
                 radius: 5000.0,
+                specular: 1000.0, // Very shiny
             },
         ],
         lights: vec![
@@ -172,10 +177,10 @@ fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, 
         None => BACKGROUND_COLOR,
         Some(sphere) => {
             let p = add(o, mul_tuple(d, closest_t)); // Compute intersection
-            let n = sub(p, sphere.center); // Compute sphere normal at intersection
-            let n = div_tuple(n, length(n)); // Normalize
+            let mut n = sub(p, sphere.center); // Compute sphere normal at intersection
+            n = div_tuple(n, length(n)); // Normalize
 
-            let lighting = compute_lighting(scene, p, n);
+            let lighting = compute_lighting(scene, p, n, sub((0.0, 0.0, 0.0), d), sphere.specular);
             let (r, g, b) = sphere.color;
 
             (
@@ -255,40 +260,56 @@ fn intersect_ray_sphere(o: (f64, f64, f64), d: (f64, f64, f64), sphere: &Sphere)
     }
 }
 
-fn compute_lighting(scene: &Scene, p: (f64, f64, f64), n: (f64, f64, f64)) -> f64 {
+fn compute_lighting(
+    scene: &Scene,
+    p: (f64, f64, f64),
+    n: (f64, f64, f64),
+    v: (f64, f64, f64),
+    specular: f64,
+) -> f64 {
     let mut i = 0.0;
 
     for light in &scene.lights {
-        match light {
+        let (intensity, l) = match light {
             Light::Ambient { intensity } => {
                 i += intensity;
+                continue;
             }
             Light::Point {
                 intensity,
                 position,
-            } => {
-                let l = sub(*position, p);
-                let n_dot_l = dot(n, l);
-
-                if n_dot_l > 0.0 {
-                    i += intensity * n_dot_l / (length(n) * length(l))
-                }
-            }
+            } => (intensity, sub(*position, p)),
             Light::Directional {
                 intensity,
                 direction,
-            } => {
-                let l = direction;
-                let n_dot_l = dot(n, *l);
+            } => (intensity, *direction),
+        };
 
-                if n_dot_l > 0.0 {
-                    i += intensity * n_dot_l / (length(n) * length(*l))
-                }
+        // Diffuse
+        let n_dot_l = dot(n, l);
+
+        if n_dot_l > 0.0 {
+            i += intensity * n_dot_l / (length(n) * length(l))
+        }
+
+        // Specular
+        if specular != -1.0 {
+            let r = sub(mul_tuple(n, 2.0 * dot(n, l)), l);
+            let r_dot_v = dot(r, v);
+
+            if r_dot_v > 0.0 {
+                i += intensity * (r_dot_v / (length(r) * length(v))).powf(specular);
             }
         }
     }
 
-    i
+    if i < 0.0 {
+        0.0
+    } else if i > 1.0 {
+        1.0
+    } else {
+        i
+    }
 }
 
 fn canvas_to_viewport(
