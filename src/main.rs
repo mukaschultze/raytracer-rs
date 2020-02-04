@@ -21,6 +21,7 @@ struct Sphere {
     radius: f64,
     color: (u8, u8, u8),
     specular: f64,
+    reflective: f64,
 }
 
 struct Texture {
@@ -91,24 +92,28 @@ pub fn main() {
                 radius: 1.0,
                 color: (255, 0, 0), // Red
                 specular: 500.0,    // Shiny
+                reflective: 0.2,    // A bit reflective
             },
             Sphere {
                 center: (2.0, 0.0, 4.0),
                 radius: 1.0,
                 color: (0, 0, 255), // Blue
                 specular: 500.0,    // Shiny
+                reflective: 0.3,    // A bit more reflective
             },
             Sphere {
                 center: (-2.0, 0.0, 4.0),
                 radius: 1.0,
                 color: (0, 255, 0), // Green
                 specular: 10.0,     // Somewhat shiny
+                reflective: 0.4,    // Even more reflective
             },
             Sphere {
                 color: (255, 255, 0), // Yellow
                 center: (0.0, -5001.0, 0.0),
                 radius: 5000.0,
                 specular: 1000.0, // Very shiny
+                reflective: 0.5,  // Half reflective
             },
         ],
         lights: vec![
@@ -132,7 +137,7 @@ pub fn main() {
                 scene.viewport_size,
                 scene.camera_d,
             );
-            let rgba = trace_ray(&scene, d, 1.0, std::f64::INFINITY);
+            let rgba = trace_ray(&scene, scene.camera_pos, d, 1.0, std::f64::INFINITY, 15);
 
             texture.put_pixel_rgba(
                 (
@@ -181,13 +186,20 @@ fn closest_intersection(
     (closest_sphere, closest_t)
 }
 
-fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, u8, u8, u8) {
-    let o = scene.camera_pos;
+fn trace_ray(
+    scene: &Scene,
+    o: (f64, f64, f64),
+    d: (f64, f64, f64),
+    t_min: f64,
+    t_max: f64,
+    recursion_depth: u16,
+) -> (u8, u8, u8, u8) {
     let (closest_sphere, closest_t) = closest_intersection(scene, o, d, t_min, t_max);
 
     match closest_sphere {
         None => BACKGROUND_COLOR,
         Some(sphere) => {
+            // Compute local color
             let p = add(o, mul_tuple(d, closest_t)); // Compute intersection
             let mut n = sub(p, sphere.center); // Compute sphere normal at intersection
             n = div_tuple(n, length(n)); // Normalize
@@ -195,10 +207,44 @@ fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, 
             let lighting = compute_lighting(scene, p, n, sub((0.0, 0.0, 0.0), d), sphere.specular);
             let (r, g, b) = sphere.color;
 
+            let local_color = (
+                (r as f64 * lighting),
+                (g as f64 * lighting),
+                (b as f64 * lighting),
+            );
+
+            // If we hit the recursion limit or the object is not reflective, we're done
+            let reflective = sphere.reflective;
+
+            if recursion_depth == 0 || reflective <= 0.0 {
+                return (
+                    local_color.0 as u8,
+                    local_color.1 as u8,
+                    local_color.2 as u8,
+                    255,
+                );
+            }
+
+            // Compute the reflected color
+            let reflect_ray = reflect_ray(sub((0.0, 0.0, 0.0), d), n);
+            let reflected_color = trace_ray(
+                scene,
+                p,
+                reflect_ray,
+                0.001,
+                std::f64::INFINITY,
+                recursion_depth - 1,
+            );
+
+            // local_color * (1 - r) + reflected_color * r
+
             (
-                (r as f64 * lighting) as u8,
-                (g as f64 * lighting) as u8,
-                (b as f64 * lighting) as u8,
+                (local_color.0 * (1.0 - reflective) + (reflected_color.0 as f64) * reflective)
+                    as u8,
+                (local_color.1 * (1.0 - reflective) + (reflected_color.1 as f64) * reflective)
+                    as u8,
+                (local_color.2 * (1.0 - reflective) + (reflected_color.2 as f64) * reflective)
+                    as u8,
                 255,
             )
         }
