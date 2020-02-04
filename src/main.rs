@@ -13,6 +13,7 @@ struct Scene {
     camera_d: f64,
     viewport_size: (f64, f64),
     spheres: Vec<Sphere>,
+    lights: Vec<Light>,
 }
 
 struct Sphere {
@@ -25,6 +26,20 @@ struct Texture {
     width: usize,
     height: usize,
     data: Vec<u8>,
+}
+
+enum Light {
+    Ambient {
+        intensity: f64,
+    },
+    Point {
+        intensity: f64,
+        position: (f64, f64, f64),
+    },
+    Directional {
+        intensity: f64,
+        direction: (f64, f64, f64),
+    },
 }
 
 impl Texture {
@@ -85,6 +100,22 @@ pub fn main() {
                 radius: 1.0,
                 color: (0, 255, 0), // Green
             },
+            Sphere {
+                color: (255, 255, 0), // Yellow
+                center: (0.0, -5001.0, 0.0),
+                radius: 5000.0,
+            },
+        ],
+        lights: vec![
+            Light::Ambient { intensity: 0.2 },
+            Light::Point {
+                intensity: 0.6,
+                position: (2.0, 1.0, 0.0),
+            },
+            Light::Directional {
+                intensity: 0.2,
+                direction: (1.0, 4.0, 4.0),
+            },
         ],
     };
 
@@ -140,8 +171,19 @@ fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, 
     match closest_sphere {
         None => BACKGROUND_COLOR,
         Some(sphere) => {
+            let p = add(o, mul_tuple(d, closest_t)); // Compute intersection
+            let n = sub(p, sphere.center); // Compute sphere normal at intersection
+            let n = div_tuple(n, length(n)); // Normalize
+
+            let lighting = compute_lighting(scene, p, n);
             let (r, g, b) = sphere.color;
-            (r, g, b, 255)
+
+            (
+                (r as f64 * lighting) as u8,
+                (g as f64 * lighting) as u8,
+                (b as f64 * lighting) as u8,
+                255,
+            )
         }
     }
 }
@@ -158,6 +200,38 @@ where
     T: std::ops::Sub<Output = T>,
 {
     (a1 - b1, a2 - b2, a3 - b3)
+}
+
+fn add<T>((a1, a2, a3): (T, T, T), (b1, b2, b3): (T, T, T)) -> (T, T, T)
+where
+    T: std::ops::Add<Output = T>,
+{
+    (a1 + b1, a2 + b2, a3 + b3)
+}
+
+fn mul<T>((a1, a2, a3): (T, T, T), (b1, b2, b3): (T, T, T)) -> (T, T, T)
+where
+    T: std::ops::Mul<Output = T>,
+{
+    (a1 * b1, a2 * b2, a3 * b3)
+}
+
+fn mul_tuple<T>((a1, a2, a3): (T, T, T), b: T) -> (T, T, T)
+where
+    T: std::ops::Mul<Output = T> + Copy,
+{
+    (a1 * b, a2 * b, a3 * b)
+}
+
+fn div_tuple<T>((a1, a2, a3): (T, T, T), b: T) -> (T, T, T)
+where
+    T: std::ops::Div<Output = T> + Copy,
+{
+    (a1 / b, a2 / b, a3 / b)
+}
+
+fn length((x, y, z): (f64, f64, f64)) -> f64 {
+    (x.powi(2) + y.powi(2) + z.powi(2)).sqrt()
 }
 
 fn intersect_ray_sphere(o: (f64, f64, f64), d: (f64, f64, f64), sphere: &Sphere) -> (f64, f64) {
@@ -179,6 +253,42 @@ fn intersect_ray_sphere(o: (f64, f64, f64), d: (f64, f64, f64), sphere: &Sphere)
             (-k2 - discriminant.sqrt()) / (2.0 * k1),
         )
     }
+}
+
+fn compute_lighting(scene: &Scene, p: (f64, f64, f64), n: (f64, f64, f64)) -> f64 {
+    let mut i = 0.0;
+
+    for light in &scene.lights {
+        match light {
+            Light::Ambient { intensity } => {
+                i += intensity;
+            }
+            Light::Point {
+                intensity,
+                position,
+            } => {
+                let l = sub(*position, p);
+                let n_dot_l = dot(n, l);
+
+                if n_dot_l > 0.0 {
+                    i += intensity * n_dot_l / (length(n) * length(l))
+                }
+            }
+            Light::Directional {
+                intensity,
+                direction,
+            } => {
+                let l = direction;
+                let n_dot_l = dot(n, *l);
+
+                if n_dot_l > 0.0 {
+                    i += intensity * n_dot_l / (length(n) * length(*l))
+                }
+            }
+        }
+    }
+
+    i
 }
 
 fn canvas_to_viewport(
