@@ -13,6 +13,7 @@ const BACKGROUND_COLOR: Vector4<u8> = vec4(255, 255, 255, 255);
 
 struct Scene {
     camera_pos: Vector3<f64>,
+    camera_rotation: Matrix3<f64>,
     camera_d: f64,
     viewport_size: Vector2<f64>,
     spheres: Vec<Sphere>,
@@ -82,9 +83,10 @@ pub fn main() {
     let mut texture = Texture::new(512, 512);
 
     let scene = Scene {
-        camera_pos: vec3(0.0, 0.0, 0.0), // O
-        camera_d: 1.0,                   // d, Distance from camera to viewport
-        viewport_size: vec2(1.0, 1.0),   // vw, vh
+        camera_pos: vec3(3.0, 0.0, 1.0), // O
+        camera_rotation: Matrix3::look_at(vec3(1.0, 0.0, 1.0), vec3(0.0, 1.0, 0.0)),
+        camera_d: 1.0,                 // d, Distance from camera to viewport
+        viewport_size: vec2(1.0, 1.0), // vw, vh
         spheres: vec![
             Sphere {
                 center: vec3(0.0, -1.0, 3.0),
@@ -130,12 +132,13 @@ pub fn main() {
 
     for cy in -(texture.height as i32 / 2)..(texture.height as i32 / 2) {
         for cx in -(texture.width as i32 / 2)..(texture.width as i32 / 2) {
-            let d = canvas_to_viewport(
-                vec2(cx as f64, cy as f64),
-                vec2(texture.width as f64, texture.height as f64),
-                scene.viewport_size,
-                scene.camera_d,
-            );
+            let d = scene.camera_rotation
+                * canvas_to_viewport(
+                    vec2(cx as f64, cy as f64),
+                    vec2(texture.width as f64, texture.height as f64),
+                    scene.viewport_size,
+                    scene.camera_d,
+                );
             let rgba = trace_ray(&scene, scene.camera_pos, d, 1.0, std::f64::INFINITY, 15);
 
             texture.put_pixel_rgba(
