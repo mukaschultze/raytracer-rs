@@ -205,6 +205,10 @@ fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, 
     }
 }
 
+fn reflect_ray(r: (f64, f64, f64), n: (f64, f64, f64)) -> (f64, f64, f64) {
+    sub(mul_tuple(n, 2.0 * dot(n, r)), r)
+}
+
 fn dot<T>((a1, a2, a3): (T, T, T), (b1, b2, b3): (T, T, T)) -> T
 where
     T: std::ops::Mul<Output = T> + std::ops::Add<Output = T>,
@@ -312,7 +316,7 @@ fn compute_lighting(
 
         // Specular
         if specular != -1.0 {
-            let r = sub(mul_tuple(n, 2.0 * dot(n, l)), l);
+            let r = reflect_ray(l, n);
             let r_dot_v = dot(r, v);
 
             if r_dot_v > 0.0 {
