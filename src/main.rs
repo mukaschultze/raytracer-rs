@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-const BACKGROUND_COLOR: (u8, u8, u8, u8) = (0, 0, 0, 0);
+const BACKGROUND_COLOR: (u8, u8, u8, u8) = (255, 255, 255, 255);
 
 struct Scene {
     camera_pos: (f64, f64, f64),
