@@ -154,8 +154,13 @@ where
     value >= min && value <= max
 }
 
-fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, u8, u8, u8) {
-    let o = scene.camera_pos;
+fn closest_intersection(
+    scene: &Scene,
+    o: (f64, f64, f64),
+    d: (f64, f64, f64),
+    t_min: f64,
+    t_max: f64,
+) -> (Option<&Sphere>, f64) {
     let mut closest_t = std::f64::INFINITY;
     let mut closest_sphere = None;
 
@@ -172,6 +177,13 @@ fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, 
             closest_sphere = Some(sphere);
         }
     }
+
+    (closest_sphere, closest_t)
+}
+
+fn trace_ray(scene: &Scene, d: (f64, f64, f64), t_min: f64, t_max: f64) -> (u8, u8, u8, u8) {
+    let o = scene.camera_pos;
+    let (closest_sphere, closest_t) = closest_intersection(scene, o, d, t_min, t_max);
 
     match closest_sphere {
         None => BACKGROUND_COLOR,
@@ -270,7 +282,7 @@ fn compute_lighting(
     let mut i = 0.0;
 
     for light in &scene.lights {
-        let (intensity, l) = match light {
+        let (intensity, l, t_max) = match light {
             Light::Ambient { intensity } => {
                 i += intensity;
                 continue;
@@ -278,12 +290,18 @@ fn compute_lighting(
             Light::Point {
                 intensity,
                 position,
-            } => (intensity, sub(*position, p)),
+            } => (intensity, sub(*position, p), 1.0),
             Light::Directional {
                 intensity,
                 direction,
-            } => (intensity, *direction),
+            } => (intensity, *direction, std::f64::INFINITY),
         };
+
+        // Shadow check
+        let (shadow_sphere, _shadow_t) = closest_intersection(scene, p, l, 0.001, t_max);
+        if let Some(_) = shadow_sphere {
+            continue;
+        }
 
         // Diffuse
         let n_dot_l = dot(n, l);
