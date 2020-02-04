@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 png = "0.15.3"
+cgmath = "0.17.0"
